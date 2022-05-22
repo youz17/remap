@@ -82,20 +82,20 @@ unsafe extern "system" fn low_level_keyboard_proc(
 }
 
 fn main() -> Result<(), ()> {
-    unsafe {
-        let hook = SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), 0, 0);
-        if hook == 0 {
-            return Err(());
-        }
-        let mut messages = MSG {
-            hwnd: 0,
-            message: 0,
-            lParam: 0,
-            wParam: 0,
-            pt: POINT { x: 0, y: 0 },
-            time: 0,
-        };
+    let hook = unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), 0, 0) };
+    if hook == 0 {
+        return Err(());
+    }
+    let mut messages = MSG {
+        hwnd: 0,
+        message: 0,
+        lParam: 0,
+        wParam: 0,
+        pt: POINT { x: 0, y: 0 },
+        time: 0,
+    };
 
+    unsafe {
         while GetMessageW(&mut messages as *mut MSG, 0, 0, 0) == 1 {
             TranslateMessage(&messages as *const MSG);
             DispatchMessageW(&messages as *const MSG);
