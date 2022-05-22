@@ -10,4 +10,4 @@ caps + un -> page up and page down
 
 caps + io -> home and end
 
-caps + '\|' -> caps
+caps + '\\|' -> caps
