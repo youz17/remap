@@ -25,6 +25,10 @@ const KEYMAP: [KeyInfo; 256] = get_keymap();
 static mut CAPS_IS_DOWN: bool = false;
 static mut SWITCH_CAPS: bool = false;
 
+// If the hook procedure processed the message, it may return a nonzero value to prevent
+// the system from passing the message to the rest of the hook chain or the target window
+// procedure
+// 返回 非零值，可以防止接下来的 hook 和 target window 处理这个键
 unsafe extern "system" fn low_level_keyboard_proc(
     code: i32,
     wparam: WPARAM,
@@ -34,31 +38,43 @@ unsafe extern "system" fn low_level_keyboard_proc(
         let p = &mut *(lparam as *mut KBDLLHOOKSTRUCT);
 
         #[cfg(debug_assertions)]
-        println!(
-            "key: {}, CAPS_IS_DOWN: {}, state: {}",
-            p.vkCode,
-            CAPS_IS_DOWN,
-            if wparam == 256 { "down" } else { "up" },
-        );
-        if p.vkCode == key::CAPS.vk_code as u32 && !SWITCH_CAPS {
-            if wparam == WM_KEYDOWN as usize {
-                CAPS_IS_DOWN = true;
-            } else if wparam == WM_KEYUP as usize {
-                CAPS_IS_DOWN = false;
+        {
+            let key_name;
+            if p.vkCode == VK_CAPITAL as u32 {
+                key_name = "caps".into();
+            } else if p.vkCode == VK_OEM_5 as u32 {
+                key_name = "\\".into();
+            } else {
+                key_name = p.vkCode.to_string();
             }
-            return S_FALSE as LRESULT;
-        } else {
-            SWITCH_CAPS = false;
+
+            println!(
+                "key: {}, state: {}, cap is down: {}, switch caps: {} ",
+                key_name,
+                if wparam == 256 { "down" } else { "up" },
+                CAPS_IS_DOWN,
+                SWITCH_CAPS
+            );
+        }
+        if p.vkCode == key::CAPS.vk_code as u32 {
+            if SWITCH_CAPS {
+                SWITCH_CAPS = false;
+            } else {
+                if wparam == WM_KEYDOWN as usize {
+                    CAPS_IS_DOWN = true;
+                } else if wparam == WM_KEYUP as usize {
+                    CAPS_IS_DOWN = false;
+                }
+                return S_FALSE as LRESULT;
+            }
         }
 
         if CAPS_IS_DOWN {
             let key_mapped = KEYMAP[p.vkCode as usize];
 
-            if key_mapped.vk_code == key::CAPS.vk_code {
-                SWITCH_CAPS = true;
-            }
-
             if key_mapped.valid {
+                SWITCH_CAPS = key_mapped.vk_code == key::CAPS.vk_code;
+
                 let flag = if key_mapped.e0 {
                     KEYEVENTF_EXTENDEDKEY
                 } else {
