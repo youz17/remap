@@ -8,7 +8,8 @@ use windows_sys::Win32::{
         },
         WindowsAndMessaging::{
             CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
-            HC_ACTION, KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP,
+            HC_ACTION, KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN,
+            WM_SYSKEYUP,
         },
     },
 };
@@ -49,21 +50,22 @@ unsafe extern "system" fn low_level_keyboard_proc(
 
         #[cfg(debug_assertions)]
         {
-            let key_name;
-            if p.vkCode == VK_CAPITAL as u32 {
-                key_name = "caps".into();
-            } else if p.vkCode == VK_OEM_5 as u32 {
-                key_name = "\\".into();
-            } else {
-                key_name = p.vkCode.to_string();
-            }
+            let key_name = match p.vkCode as u16 {
+                VK_CAPITAL => "caps".into(),
+                VK_OEM_5 => "\\".into(),
+                _ => p.vkCode.to_string(),
+            };
+
+            let key_state = match wparam as u32 {
+                WM_KEYUP => "up",
+                WM_KEYDOWN => "down",
+                WM_SYSKEYDOWN => "sys_down",
+                WM_SYSKEYUP => "sys_up",
+                _ => "unknow",
+            };
 
             println!(
-                "key: {}, state: {}, cap is down: {}, switch caps: {} ",
-                key_name,
-                if wparam == 256 { "down" } else { "up" },
-                CAPS_IS_DOWN,
-                SWITCH_CAPS
+                "key: {key_name}, state: {key_state}, cap is down: {CAPS_IS_DOWN}, switch caps: {SWITCH_CAPS}"
             );
         }
         if p.vkCode == key::CAPS.vk_code as u32 {
