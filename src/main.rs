@@ -1,6 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // 不显示 cmd 黑框
 use windows_sys::Win32::{
-    Foundation::*, UI::Input::KeyboardAndMouse::*, UI::WindowsAndMessaging::*,
+    Foundation::{LPARAM, LRESULT, POINT, S_FALSE, WPARAM},
+    UI::{
+        Input::KeyboardAndMouse::{
+            keybd_event, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, VK_CAPITAL, VK_H, VK_I, VK_J,
+            VK_K, VK_L, VK_N, VK_O, VK_OEM_5, VK_U,
+        },
+        WindowsAndMessaging::{
+            CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
+            HC_ACTION, KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP,
+        },
+    },
 };
 
 mod key;
@@ -116,7 +126,6 @@ fn main() -> Result<(), ()> {
             TranslateMessage(&messages as *const MSG);
             DispatchMessageW(&messages as *const MSG);
         }
-        UnhookWindowsHookEx(hook);
     }
 
     Ok(())
