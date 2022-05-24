@@ -3,8 +3,7 @@ use windows_sys::Win32::{
     Foundation::{LPARAM, LRESULT, POINT, S_FALSE, WPARAM},
     UI::{
         Input::KeyboardAndMouse::{
-            keybd_event, MapVirtualKeyA, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, VK_CAPITAL, VK_H,
-            VK_I, VK_J, VK_K, VK_L, VK_N, VK_O, VK_OEM_5, VK_U,
+            MapVirtualKeyA, VK_CAPITAL, VK_H, VK_I, VK_J, VK_K, VK_L, VK_N, VK_O, VK_OEM_5, VK_U,
         },
         WindowsAndMessaging::{
             CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
@@ -15,7 +14,7 @@ use windows_sys::Win32::{
 };
 
 mod key;
-use key::KeyInfo;
+use key::{send_input, KeyInfo};
 
 const fn get_keymap() -> [KeyInfo; 256] {
     let mut map: [KeyInfo; 256] = [KeyInfo::invalid(); 256];
@@ -94,20 +93,10 @@ unsafe extern "system" fn low_level_keyboard_proc(
             if key_mapped.valid {
                 SWITCH_CAPS = key_mapped.vk_code == key::CAPS.vk_code;
 
-                let flag = if key_mapped.e0 {
-                    KEYEVENTF_EXTENDEDKEY
-                } else {
-                    0
-                };
                 if wparam == WM_KEYDOWN as usize {
-                    keybd_event(key_mapped.vk_code, key_mapped.scan_code, flag, 0);
+                    send_input(&key_mapped, 0, false);
                 } else if wparam == WM_KEYUP as usize {
-                    keybd_event(
-                        key_mapped.vk_code,
-                        key_mapped.scan_code,
-                        flag | KEYEVENTF_KEYUP,
-                        0,
-                    );
+                    send_input(&key_mapped, 0, true);
                 }
                 return S_FALSE as LRESULT;
             }

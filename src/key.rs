@@ -1,6 +1,9 @@
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP,
+    VK_CAPITAL, VK_DOWN, VK_END, VK_HOME, VK_LEFT, VK_NEXT, VK_PRIOR, VK_RIGHT, VK_UP,
+};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct KeyInfo {
     pub vk_code: u8,
     pub scan_code: u8,
@@ -46,3 +49,32 @@ pub const PGUP: KeyInfo = KeyInfo::with_e0(VK_PRIOR as u8, 0x49);
 pub const PGDOWN: KeyInfo = KeyInfo::with_e0(VK_NEXT as u8, 0x51);
 pub const HOME: KeyInfo = KeyInfo::with_e0(VK_HOME as u8, 0x47);
 pub const END: KeyInfo = KeyInfo::with_e0(VK_END as u8, 0x4f);
+
+pub fn send_input(key: &KeyInfo, extra_info: usize, up: bool) -> u32 {
+    let flag = if up { KEYEVENTF_KEYUP } else { 0 };
+
+    let flags = flag | if key.e0 { KEYEVENTF_EXTENDEDKEY } else { 0 };
+
+    let input = INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: key.vk_code as u16,
+                wScan: key.scan_code as u16,
+                dwFlags: flags,
+                time: 0,
+                dwExtraInfo: extra_info,
+            },
+        },
+    };
+
+    // SendInput 按照 msdn 的说法 在 input 被其他线程阻塞的时候是会失败的, 还有啥 UIPI
+    // 这里暂时不知道怎么处理，因为我也不能循环发送让他卡在这里啊。。。
+    unsafe {
+        SendInput(
+            1,
+            &input as *const INPUT,
+            std::mem::size_of::<INPUT>() as i32,
+        )
+    }
+}
