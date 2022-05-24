@@ -31,9 +31,9 @@ const fn get_keymap() -> [KeyInfo; 256] {
 }
 
 const KEYMAP: [KeyInfo; 256] = get_keymap();
+const CAPS_MAGIC_NUMBER: usize = 0x534534;
 
 static mut CAPS_IS_DOWN: bool = false;
-static mut SWITCH_CAPS: bool = false;
 
 // If the hook procedure processed the message, it may return a nonzero value to prevent
 // the system from passing the message to the rest of the hook chain or the target window
@@ -70,33 +70,30 @@ unsafe extern "system" fn low_level_keyboard_proc(
                 _ => "unknow",
             };
 
-            println!(
-                "key: {key_name}, state: {key_state}, cap is down: {CAPS_IS_DOWN}, switch caps: {SWITCH_CAPS}"
-            );
+            println!("key: {key_name}, state: {key_state}, cap is down: {CAPS_IS_DOWN}");
         }
-        if p.vkCode == key::CAPS.vk_code as u32 {
-            if SWITCH_CAPS {
-                SWITCH_CAPS = false;
-            } else {
-                if wparam == WM_KEYDOWN as usize {
-                    CAPS_IS_DOWN = true;
-                } else if wparam == WM_KEYUP as usize {
-                    CAPS_IS_DOWN = false;
-                }
-                return S_FALSE as LRESULT;
+        if p.vkCode == key::CAPS.vk_code as u32 && p.dwExtraInfo != CAPS_MAGIC_NUMBER {
+            if wparam == WM_KEYDOWN as usize {
+                CAPS_IS_DOWN = true;
+            } else if wparam == WM_KEYUP as usize {
+                CAPS_IS_DOWN = false;
             }
+            return S_FALSE as LRESULT;
         }
 
         if CAPS_IS_DOWN {
             let key_mapped = KEYMAP[p.vkCode as usize];
+            let extra_info = if key_mapped == key::CAPS {
+                CAPS_MAGIC_NUMBER
+            } else {
+                0
+            };
 
             if key_mapped.valid {
-                SWITCH_CAPS = key_mapped.vk_code == key::CAPS.vk_code;
-
                 if wparam == WM_KEYDOWN as usize {
-                    send_input(&key_mapped, 0, false);
+                    send_input(&key_mapped, extra_info, false);
                 } else if wparam == WM_KEYUP as usize {
-                    send_input(&key_mapped, 0, true);
+                    send_input(&key_mapped, extra_info, true);
                 }
                 return S_FALSE as LRESULT;
             }
