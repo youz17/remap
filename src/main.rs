@@ -73,10 +73,14 @@ unsafe extern "system" fn low_level_keyboard_proc(
             println!("key: {key_name}, state: {key_state}, cap is down: {CAPS_IS_DOWN}");
         }
         if p.vkCode == key::CAPS.vk_code as u32 && p.dwExtraInfo != CAPS_MAGIC_NUMBER {
-            if wparam == WM_KEYDOWN as usize {
-                CAPS_IS_DOWN = true;
-            } else if wparam == WM_KEYUP as usize {
-                CAPS_IS_DOWN = false;
+            match wparam as u32 {
+                WM_KEYDOWN | WM_SYSKEYDOWN => {
+                    CAPS_IS_DOWN = true;
+                }
+                WM_KEYUP | WM_SYSKEYUP => {
+                    CAPS_IS_DOWN = false;
+                }
+                _ => {}
             }
             return S_FALSE as LRESULT;
         }
@@ -90,10 +94,14 @@ unsafe extern "system" fn low_level_keyboard_proc(
             };
 
             if key_mapped.valid {
-                if wparam == WM_KEYDOWN as usize {
-                    send_input(&key_mapped, extra_info, false);
-                } else if wparam == WM_KEYUP as usize {
-                    send_input(&key_mapped, extra_info, true);
+                match wparam as u32 {
+                    WM_KEYDOWN | WM_SYSKEYDOWN => {
+                        send_input(&key_mapped, extra_info, false);
+                    }
+                    WM_KEYUP | WM_SYSKEYUP => {
+                        send_input(&key_mapped, extra_info, true);
+                    }
+                    _ => {}
                 }
                 return S_FALSE as LRESULT;
             }
