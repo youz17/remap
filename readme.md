@@ -14,4 +14,4 @@ caps + io -> home and end
 caps + '\\|' -> caps
 
 ## todo
-1. replace `SWITCH_CAPS` flag with Input Extra Info
+1. 考虑下影响面, 这种键盘钩子会影响到其他应用吗？虽然影响限定在按下**caps**键的时候
