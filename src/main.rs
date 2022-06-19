@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // 不显示 cmd 黑框
 use windows_sys::Win32::{
-    Foundation::{LPARAM, LRESULT, POINT, S_FALSE, WPARAM},
+    Foundation::{LPARAM, LRESULT, S_FALSE, WPARAM},
     UI::{
         Input::KeyboardAndMouse::{
             MapVirtualKeyA, VK_CAPITAL, VK_H, VK_I, VK_J, VK_K, VK_L, VK_N, VK_O, VK_OEM_5, VK_U,
@@ -115,19 +115,12 @@ fn main() -> Result<(), ()> {
     if hook == 0 {
         return Err(());
     }
-    let mut messages = MSG {
-        hwnd: 0,
-        message: 0,
-        lParam: 0,
-        wParam: 0,
-        pt: POINT { x: 0, y: 0 },
-        time: 0,
-    };
+    let mut messages: MSG = unsafe { std::mem::zeroed() };
 
     unsafe {
-        while GetMessageW(&mut messages as *mut MSG, 0, 0, 0) == 1 {
-            TranslateMessage(&messages as *const MSG);
-            DispatchMessageW(&messages as *const MSG);
+        while GetMessageW(&mut messages, 0, 0, 0) == 1 {
+            TranslateMessage(&messages);
+            DispatchMessageW(&messages);
         }
     }
 
