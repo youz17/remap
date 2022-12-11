@@ -3,8 +3,8 @@ use windows_sys::Win32::{
     Foundation::{LPARAM, LRESULT, S_FALSE, WPARAM},
     UI::{
         Input::KeyboardAndMouse::{
-            MapVirtualKeyA, VK_0, VK_1, VK_9, VK_B, VK_CAPITAL, VK_G, VK_H, VK_I, VK_J, VK_K, VK_L,
-            VK_M, VK_N, VK_O, VK_OEM_3, VK_OEM_5, VK_SPACE, VK_U, VK_Y,
+            VK_0, VK_1, VK_9, VK_B, VK_CAPITAL, VK_G, VK_H, VK_I, VK_J, VK_K, VK_L, VK_M, VK_N,
+            VK_O, VK_OEM_3, VK_OEM_5, VK_SPACE, VK_U, VK_Y,
         },
         WindowsAndMessaging::{
             CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
@@ -126,6 +126,34 @@ unsafe fn keymap_with_level(kbd_info: &KBDLLHOOKSTRUCT, wparam: WPARAM) -> bool 
     }
 }
 
+#[allow(dead_code)]
+unsafe fn debug_log(kbd_info: &KBDLLHOOKSTRUCT, wparam: WPARAM) {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::MapVirtualKeyA;
+    let key_name = match kbd_info.vkCode as u16 {
+        VK_CAPITAL => "caps".into(),
+        VK_OEM_5 => "\\".into(),
+        _ => {
+            let c = MapVirtualKeyA(kbd_info.vkCode, 2 /* map vk to char */);
+            if c != 0 {
+                format!("'{}'", char::from_u32(c).unwrap())
+            } else {
+                kbd_info.vkCode.to_string()
+            }
+        }
+    };
+
+    let key_state = match wparam as u32 {
+        WM_KEYDOWN => "down",
+        WM_KEYUP => "up",
+        WM_SYSKEYDOWN => "sys_down",
+        WM_SYSKEYUP => "sys_up",
+        _ => "unknow",
+    };
+
+    let vk = kbd_info.vkCode;
+    println!("key: {key_name}, vk: {vk}, state: {key_state}, cap is down: {CAPS_IS_DOWN}");
+}
+
 // 返回 非零值，可以防止接下来的 hook 和 target window 处理这个键
 unsafe extern "system" fn low_level_keyboard_proc(
     code: i32,
@@ -136,31 +164,8 @@ unsafe extern "system" fn low_level_keyboard_proc(
         let p = &mut *(lparam as *mut KBDLLHOOKSTRUCT);
 
         #[cfg(debug_assertions)]
-        {
-            let key_name = match p.vkCode as u16 {
-                VK_CAPITAL => "caps".into(),
-                VK_OEM_5 => "\\".into(),
-                _ => {
-                    let c = MapVirtualKeyA(p.vkCode, 2 /* map vk to char */);
-                    if c != 0 {
-                        format!("'{}'", char::from_u32(c).unwrap())
-                    } else {
-                        p.vkCode.to_string()
-                    }
-                }
-            };
+        debug_log(p, wparam);
 
-            let key_state = match wparam as u32 {
-                WM_KEYDOWN => "down",
-                WM_KEYUP => "up",
-                WM_SYSKEYDOWN => "sys_down",
-                WM_SYSKEYUP => "sys_up",
-                _ => "unknow",
-            };
-
-            let vk = p.vkCode;
-            println!("key: {key_name}, vk: {vk}, state: {key_state}, cap is down: {CAPS_IS_DOWN}");
-        }
         if keymap_with_caps(p, wparam) || keymap_with_level(p, wparam) {
             return S_FALSE as LRESULT;
         }
