@@ -3,7 +3,8 @@ use windows_sys::Win32::{
     Foundation::{LPARAM, LRESULT, S_FALSE, WPARAM},
     UI::{
         Input::KeyboardAndMouse::{
-            MapVirtualKeyA, VK_CAPITAL, VK_H, VK_I, VK_J, VK_K, VK_L, VK_N, VK_O, VK_OEM_5, VK_U,
+            MapVirtualKeyA, VK_0, VK_1, VK_9, VK_B, VK_CAPITAL, VK_G, VK_H, VK_I, VK_J, VK_K, VK_L,
+            VK_M, VK_N, VK_O, VK_OEM_3, VK_OEM_5, VK_SPACE, VK_U, VK_Y,
         },
         WindowsAndMessaging::{
             CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
@@ -48,10 +49,12 @@ const CAPS_KEYMAP: [KeyInfo; 256] = get_caps_keymap();
 const CAPS_MAGIC_NUMBER: usize = 0x534534;
 
 static mut CAPS_IS_DOWN: bool = false;
+static mut KEYMAP_LEVEL: i32 = 0;
 
 // 处理 caps 相关逻辑, 返回 true 表示吃掉这个按键, 这个函数会发送按键
 unsafe fn keymap_with_caps(kbd_info: &KBDLLHOOKSTRUCT, wparam: WPARAM) -> bool {
-    if kbd_info.vkCode == key::CAPS.vk_code as u32 && kbd_info.dwExtraInfo != CAPS_MAGIC_NUMBER {
+    let vk_code = kbd_info.vkCode as u16;
+    if vk_code == key::CAPS.vk_code as u16 && kbd_info.dwExtraInfo != CAPS_MAGIC_NUMBER {
         match wparam as u32 {
             WM_KEYDOWN | WM_SYSKEYDOWN => {
                 CAPS_IS_DOWN = true;
@@ -65,7 +68,17 @@ unsafe fn keymap_with_caps(kbd_info: &KBDLLHOOKSTRUCT, wparam: WPARAM) -> bool {
     }
 
     if CAPS_IS_DOWN {
-        let key_mapped = CAPS_KEYMAP[kbd_info.vkCode as usize];
+        // level 切换的部分暂时放这里，其实按我想法，最好的是设置一个特殊键盘值，用于切换 level
+        if vk_code >= VK_1 && vk_code <= VK_9 {
+            KEYMAP_LEVEL = (vk_code - VK_0) as i32;
+            return true;
+        } else if vk_code == VK_OEM_3 {
+            /* OEM_3 is `~ */
+            KEYMAP_LEVEL = 0;
+            return true;
+        }
+
+        let key_mapped = CAPS_KEYMAP[vk_code as usize];
         let extra_info = if key_mapped == key::CAPS {
             CAPS_MAGIC_NUMBER
         } else {
@@ -78,6 +91,39 @@ unsafe fn keymap_with_caps(kbd_info: &KBDLLHOOKSTRUCT, wparam: WPARAM) -> bool {
         }
     }
     return false;
+}
+
+const fn get_leveled_keymaps() -> [[KeyInfo; 256]; 1] {
+    // 不要在这里映射 caps 相关的
+    let mut level1_map = [KeyInfo::invalid(); 256];
+    level1_map[VK_B as usize] = key::NUM1;
+    level1_map[VK_N as usize] = key::NUM2;
+    level1_map[VK_M as usize] = key::NUM3;
+
+    level1_map[VK_G as usize] = key::NUM4;
+    level1_map[VK_H as usize] = key::NUM5;
+    level1_map[VK_J as usize] = key::NUM6;
+
+    level1_map[VK_Y as usize] = key::NUM7;
+    level1_map[VK_U as usize] = key::NUM8;
+    level1_map[VK_I as usize] = key::NUM9;
+
+    level1_map[VK_SPACE as usize] = key::NUM0;
+    [level1_map]
+}
+const LEVELED_KEYMAPS: [[KeyInfo; 256]; 1] = get_leveled_keymaps();
+
+unsafe fn keymap_with_level(kbd_info: &KBDLLHOOKSTRUCT, wparam: WPARAM) -> bool {
+    if KEYMAP_LEVEL == 0 || KEYMAP_LEVEL as usize > LEVELED_KEYMAPS.len() {
+        return false;
+    }
+    let key_mapped = LEVELED_KEYMAPS[KEYMAP_LEVEL as usize - 1][kbd_info.vkCode as usize];
+    if key_mapped.valid {
+        send_key(&key_mapped, 0, wparam as u32);
+        true
+    } else {
+        false
+    }
 }
 
 // 返回 非零值，可以防止接下来的 hook 和 target window 处理这个键
@@ -105,16 +151,17 @@ unsafe extern "system" fn low_level_keyboard_proc(
             };
 
             let key_state = match wparam as u32 {
-                WM_KEYUP => "up",
                 WM_KEYDOWN => "down",
+                WM_KEYUP => "up",
                 WM_SYSKEYDOWN => "sys_down",
                 WM_SYSKEYUP => "sys_up",
                 _ => "unknow",
             };
 
-            println!("key: {key_name}, state: {key_state}, cap is down: {CAPS_IS_DOWN}");
+            let vk = p.vkCode;
+            println!("key: {key_name}, vk: {vk}, state: {key_state}, cap is down: {CAPS_IS_DOWN}");
         }
-        if keymap_with_caps(p, wparam) {
+        if keymap_with_caps(p, wparam) || keymap_with_level(p, wparam) {
             return S_FALSE as LRESULT;
         }
     }
