@@ -16,7 +16,19 @@ use windows_sys::Win32::{
 mod key;
 use key::{send_input, KeyInfo};
 
-const fn get_keymap() -> [KeyInfo; 256] {
+fn send_key(key: &KeyInfo, extra_info: usize, wparam: u32) {
+    match wparam as u32 {
+        WM_KEYDOWN | WM_SYSKEYDOWN => {
+            send_input(key, extra_info, false);
+        }
+        WM_KEYUP | WM_SYSKEYUP => {
+            send_input(key, extra_info, true);
+        }
+        _ => {}
+    }
+}
+
+const fn get_caps_keymap() -> [KeyInfo; 256] {
     let mut map: [KeyInfo; 256] = [KeyInfo::invalid(); 256];
     map[VK_H as usize] = key::LEFT;
     map[VK_J as usize] = key::DOWN;
@@ -30,14 +42,44 @@ const fn get_keymap() -> [KeyInfo; 256] {
     map
 }
 
-const KEYMAP: [KeyInfo; 256] = get_keymap();
+const CAPS_KEYMAP: [KeyInfo; 256] = get_caps_keymap();
+// 这个值用于标识这个 caps 是映射后的 caps，在开了两个 remap 进程的时候有用, 远程桌面的时候也有用
+// 没查到 dwExtraInfo 有啥用，真出问题的时候再说
 const CAPS_MAGIC_NUMBER: usize = 0x534534;
 
 static mut CAPS_IS_DOWN: bool = false;
 
-// If the hook procedure processed the message, it may return a nonzero value to prevent
-// the system from passing the message to the rest of the hook chain or the target window
-// procedure
+// 处理 caps 相关逻辑, 返回 true 表示吃掉这个按键, 这个函数会发送按键
+unsafe fn keymap_with_caps(kbd_info: &KBDLLHOOKSTRUCT, wparam: WPARAM) -> bool {
+    if kbd_info.vkCode == key::CAPS.vk_code as u32 && kbd_info.dwExtraInfo != CAPS_MAGIC_NUMBER {
+        match wparam as u32 {
+            WM_KEYDOWN | WM_SYSKEYDOWN => {
+                CAPS_IS_DOWN = true;
+            }
+            WM_KEYUP | WM_SYSKEYUP => {
+                CAPS_IS_DOWN = false;
+            }
+            _ => {}
+        }
+        return true;
+    }
+
+    if CAPS_IS_DOWN {
+        let key_mapped = CAPS_KEYMAP[kbd_info.vkCode as usize];
+        let extra_info = if key_mapped == key::CAPS {
+            CAPS_MAGIC_NUMBER
+        } else {
+            0
+        };
+
+        if key_mapped.valid {
+            send_key(&key_mapped, extra_info, wparam as u32);
+            return true;
+        }
+    }
+    return false;
+}
+
 // 返回 非零值，可以防止接下来的 hook 和 target window 处理这个键
 unsafe extern "system" fn low_level_keyboard_proc(
     code: i32,
@@ -72,39 +114,8 @@ unsafe extern "system" fn low_level_keyboard_proc(
 
             println!("key: {key_name}, state: {key_state}, cap is down: {CAPS_IS_DOWN}");
         }
-        if p.vkCode == key::CAPS.vk_code as u32 && p.dwExtraInfo != CAPS_MAGIC_NUMBER {
-            match wparam as u32 {
-                WM_KEYDOWN | WM_SYSKEYDOWN => {
-                    CAPS_IS_DOWN = true;
-                }
-                WM_KEYUP | WM_SYSKEYUP => {
-                    CAPS_IS_DOWN = false;
-                }
-                _ => {}
-            }
+        if keymap_with_caps(p, wparam) {
             return S_FALSE as LRESULT;
-        }
-
-        if CAPS_IS_DOWN {
-            let key_mapped = KEYMAP[p.vkCode as usize];
-            let extra_info = if key_mapped == key::CAPS {
-                CAPS_MAGIC_NUMBER
-            } else {
-                0
-            };
-
-            if key_mapped.valid {
-                match wparam as u32 {
-                    WM_KEYDOWN | WM_SYSKEYDOWN => {
-                        send_input(&key_mapped, extra_info, false);
-                    }
-                    WM_KEYUP | WM_SYSKEYUP => {
-                        send_input(&key_mapped, extra_info, true);
-                    }
-                    _ => {}
-                }
-                return S_FALSE as LRESULT;
-            }
         }
     }
     CallNextHookEx(1, code, wparam, lparam)
